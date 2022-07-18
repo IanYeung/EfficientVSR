@@ -1,0 +1,93 @@
+name: BasicUniVSRFeatPropVideoSwinFusion_20Resblk_REDS_BIx4
+model_type: VideoRecurrentModel
+scale: 4
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+datasets:
+  test_1:
+    name: REDS4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/REDS4/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/REDS4/Bicubic4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+  test_2:
+    name: Vid4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/Vid4/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/Vid4/Bicubic4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+  test_3:
+    name: UDM10
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/UDM10/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/UDM10/Bicubic4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+  test_4:
+    name: ToS3
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/ToS3/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/ToS3/Bicubic4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+  test_5:
+    name: SPMCS
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/SPMCS/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/SPMCS/Bicubic4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+
+# network structures
+#network_g:
+# type: BasicUniVSRFeatPropWithFlowDCN
+# num_feat: 64
+# num_extract_block: 0
+# num_block: 20
+# deformable_groups: 8
+# spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+
+network_g:
+  type: BasicUniVSRFeatPropVideoSwinFusion
+  num_feat: 64
+  num_extract_block: 0
+  num_block: 20
+  deformable_groups: 8
+  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+  depth: 1
+  num_heads: 1
+  window_size: [2, 4, 4]
+  mlp_ratio: 2
+
+# path
+path:
+  pretrain_network_g: experiments/pretrained_models/OnlineVSR/BasicUniVSRFeatPropVideoSwinFusion_20Resblk_REDS_BIx4.pth
+  strict_load_g: true
+
+# validation settings
+val:
+  save_img: true
+  suffix: ~  # add suffix to saved images, if None, use exp name
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: false
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: false

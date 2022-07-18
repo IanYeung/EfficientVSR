@@ -1,0 +1,162 @@
+# general settings
+name: VideoRecurrentGANModel_UNetDiscriminatorWithSpectralNorm_Vimeo90K_BDx4_WFV5e2
+model_type: VideoRecurrentGANModel
+scale: 4
+num_gpu: auto  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+# dataset and data loader settings
+datasets:
+  train:
+    name: Vimeo90K
+    type: Vimeo90KRecurrentDataset
+    dataroot_gt: /data2/yangxi/datasets/Vimeo90k/vimeo_septuplet/sequences
+    dataroot_lq: /data2/yangxi/datasets/Vimeo90k/vimeo_septuplet_GaussianLRx4/sequences
+    meta_info_file: basicsr/data/meta_info/meta_info_Vimeo90K_train_GT.txt
+    io_backend:
+      type: disk
+
+    num_frame: -1
+    gt_size: 192
+    interval_list: [1]
+    random_reverse: false
+    use_hflip: true
+    use_rot: true
+    flip_sequence: true
+
+    # data loader
+    use_shuffle: true
+    num_worker_per_gpu: 6
+    batch_size_per_gpu: 1
+    dataset_enlarge_ratio: 200
+    prefetch_mode: ~
+
+  val:
+    name: Vid4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/Vid4/GT
+    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/Vid4/Gaussian4xLR
+
+    cache_data: True
+    io_backend:
+      type: disk
+
+    num_frame: -1  # not needed
+
+# network structures
+network_g:
+  type: BasicVSR
+  num_feat: 64
+  num_block: 30
+  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+
+#network_d:
+#  type: VGGStyleDiscriminator
+#  num_in_ch: 3
+#  num_feat: 32
+#  input_size: 256
+
+network_d:
+  type: UNetDiscriminatorWithSpectralNorm
+  num_in_ch: 3
+  num_feat: 32
+  skip_connection: true
+
+# path
+path:
+  pretrain_network_g: experiments/pretrained_models/BasicVSR/BasicVSR_30ResBlk_Vimeo90K_BDx4.pth
+  strict_load_g: true
+  resume_state: ~
+
+# training settings
+train:
+  ema_decay: 0.999
+  optim_g:
+    type: Adam
+    lr: !!float 5e-5
+    weight_decay: 0
+    betas: [0.9, 0.99]
+  lr_flow: !!float 0
+  optim_d:
+    type: Adam
+    lr: !!float 5e-5
+    weight_decay: 0
+    betas: [0.9, 0.99]
+
+  scheduler:
+    type: MultiStepLR
+    milestones: [150000]
+    gamma: 0.5
+
+  total_iter: 150000
+  warmup_iter: -1  # no warm up
+  fix_flow: ~
+
+  # losses
+  pixel_opt:
+    type: L1Loss
+    loss_weight: 1.0
+    reduction: mean
+  perceptual_opt:
+    type: PerceptualLoss
+    layer_weights:
+      'conv1_2': 0.1
+      'conv2_2': 0.1
+      'conv3_4': 1
+      'conv4_4': 1
+      'conv5_4': 1  # before relu
+    vgg_type: vgg19
+    use_input_norm: true
+    range_norm: false
+    perceptual_weight: 1.0
+    style_weight: 0
+    criterion: l1
+  frame_variation_opt:
+    type: FrameVariationLoss
+    loss_weight: !!float 5e2
+    reduction: mean
+    order: 1.0
+    with_wmap: true
+    ksize: 7
+#  local_discriminative_opt:
+#    type: LocalDiscriminativeLoss
+#    loss_weight: !!float 5e2
+#    reduction: mean
+#    ksize: 7
+  gan_opt:
+    type: GANLoss
+    gan_type: vanilla
+    real_label_val: 1.0
+    fake_label_val: 0.0
+    loss_weight: !!float 5e-2
+
+  net_d_iters: 1
+  net_d_init_iters: 0
+
+# validation settings
+val:
+  val_freq: !!float 1e4
+  save_img: true
+  suffix: ~  # add suffix to saved images, if None, use exp name
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 4
+      test_y_channel: false
+
+# logging settings
+logger:
+  print_freq: 100
+  save_checkpoint_freq: !!float 1e4
+  use_tb_logger: true
+  wandb:
+    project: ~
+    resume_id: ~
+
+# dist training settings
+dist_params:
+  backend: nccl
+  port: 29500
+
+find_unused_parameters: true

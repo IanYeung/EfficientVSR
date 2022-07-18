@@ -1,0 +1,60 @@
+name: RRN_30BLK32CHN_RecurrentDataset_BDx4
+model_type: VideoRecurrentModel
+scale: 4
+num_gpu: 1  # set num_gpu: 0 for cpu mode
+manual_seed: 0
+
+datasets:
+  test_1:
+    name: Vid4
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/Vid4/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/Vid4/Gaussian4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+  test_2:
+    name: UDM10
+    type: VideoRecurrentTestDataset
+    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/UDM10/GT
+    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/UDM10/Gaussian4xLR
+    cache_data: True
+    io_backend:
+      type: disk
+    num_frame: -1  # not needed
+#  test_3:
+#    name: UHD20
+#    type: VideoRecurrentTestDataset
+#    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/UHD20/GT
+#    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/UHD20/Gaussian4xLR
+#    cache_data: True
+#    io_backend:
+#      type: disk
+#    num_frame: -1  # not needed
+
+#network structures
+network_g:
+  type: RRN
+  n_c: 32
+  n_b: 30
+
+# path
+path:
+  pretrain_network_g: /home/xiyang/Downloads/RRN_30BLK32CHN_Vimeo90K_BDx4/models/net_g_latest.pth
+  strict_load_g: true
+
+# validation settings
+val:
+  save_img: false
+  suffix: ~  # add suffix to saved images, if None, use exp name
+
+  metrics:
+    psnr: # metric name, can be arbitrary
+      type: calculate_psnr
+      crop_border: 0
+      test_y_channel: true
+    ssim:
+      type: calculate_ssim
+      crop_border: 0
+      test_y_channel: true
