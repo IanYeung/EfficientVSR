@@ -58,11 +58,14 @@ class SpyNet(nn.Module):
             supp.insert(0, F.avg_pool2d(input=supp[0], kernel_size=2, stride=2, count_include_pad=False))
 
         flow = ref[0].new_zeros(
-            [ref[0].size(0), 2, int(math.floor(ref[0].size(2) / 2.0)), int(math.floor(ref[0].size(3) / 2.0))]
+            [ref[0].size(0), 2, int(math.floor(ref[0].size(2))), int(math.floor(ref[0].size(3)))]
         )
 
         for level in range(len(ref)):
-            upsampled_flow = F.interpolate(input=flow, scale_factor=2, mode='bilinear', align_corners=True) * 2.0
+            if level == 0:
+                upsampled_flow = flow
+            else:
+                upsampled_flow = F.interpolate(input=flow, scale_factor=2, mode='bilinear', align_corners=True) * 2.0
 
             if upsampled_flow.size(2) != ref[level].size(2):
                 upsampled_flow = F.pad(input=upsampled_flow, pad=[0, 0, 0, 1], mode='replicate')

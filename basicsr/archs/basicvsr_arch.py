@@ -8,6 +8,7 @@ from basicsr.ops.softsplat import FunctionSoftsplat, ModuleSoftsplat
 from basicsr.utils.registry import ARCH_REGISTRY
 from .arch_util import ResidualBlockNoBN, ConvNextResBlock, flow_warp, make_layer
 from .arch_util import FirstOrderDeformableAlignment
+from .arch_util import FwFlowGuidedFirstOrderDeformableAlignment, BwFlowGuidedFirstOrderDeformableAlignment
 from .arch_util import FlowGuidedDeformAttnAlignV1, FlowGuidedDeformAttnAlignV2, FlowGuidedDeformAttnAlignV3
 from .edvr_arch import PCDAlignment, TSAFusion
 from .spynet_arch import SpyNet
@@ -1290,8 +1291,8 @@ class RealTimeBasicVSRCouplePropV2(nn.Module):
         self.feat_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
 
         # alignment
-        self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
-        # self.flownet = SpyNet(flownet_path)
+        # self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
+        self.flownet = SpyNet(flownet_path)
 
         # propagation
         self.backward_trunk = ConvResidualBlocks(2 * num_feat, num_feat, num_block)
@@ -1397,8 +1398,8 @@ class RealTimeBasicVSRCouplePropV3(nn.Module):
         self.feat_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
 
         # alignment
-        self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
-        # self.flownet = SpyNet(flownet_path)
+        # self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
+        self.flownet = SpyNet(flownet_path)
         self.flow_guided_dcn = FirstOrderDeformableAlignment(num_feat,
                                                              num_feat,
                                                              3,
@@ -1749,8 +1750,8 @@ class RealTimeBasicVSRCouplePropV2_FF(nn.Module):
         self.feat_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
 
         # alignment
-        self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
-        # self.flownet = SpyNet(flownet_path)
+        # self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
+        self.flownet = SpyNet(flownet_path)
 
         # propagation
         self.backward_trunk = ConvResidualBlocks(2 * num_feat, num_feat, num_block)
@@ -1855,17 +1856,26 @@ class RealTimeBasicVSRCouplePropV3_FF(nn.Module):
         self.feat_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
 
         # alignment
-        self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
-        # self.flownet = SpyNet(flownet_path)
-        self.flow_guided_dcn = FirstOrderDeformableAlignment(num_feat,
-                                                             num_feat,
-                                                             3,
-                                                             stride=1,
-                                                             padding=1,
-                                                             dilation=1,
-                                                             groups=1,
-                                                             deformable_groups=deformable_groups,
-                                                             bias=True)
+        # self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
+        self.flownet = SpyNet(flownet_path)
+        self.flow_guided_dcn_fw = FwFlowGuidedFirstOrderDeformableAlignment(num_feat,
+                                                                            num_feat,
+                                                                            3,
+                                                                            stride=1,
+                                                                            padding=1,
+                                                                            dilation=1,
+                                                                            groups=1,
+                                                                            deformable_groups=deformable_groups,
+                                                                            bias=True)
+        self.flow_guided_dcn_bw = BwFlowGuidedFirstOrderDeformableAlignment(num_feat,
+                                                                            num_feat,
+                                                                            3,
+                                                                            stride=1,
+                                                                            padding=1,
+                                                                            dilation=1,
+                                                                            groups=1,
+                                                                            deformable_groups=deformable_groups,
+                                                                            bias=True)
 
         # propagation
         self.backward_trunk = ConvResidualBlocks(2 * num_feat, num_feat, num_block)
@@ -1911,7 +1921,7 @@ class RealTimeBasicVSRCouplePropV3_FF(nn.Module):
             if i < n - 1:
                 flow = flows_forward[:, i, :, :, :]
                 extra_feat = torch.cat([feat_i, FunctionSoftsplat(feat_prop, flow, None, 'average')], dim=1)
-                feat_prop = self.flow_guided_dcn(feat_prop, extra_feat, flow)
+                feat_prop = self.flow_guided_dcn_fw(feat_prop, extra_feat, flow)
             feat_prop = torch.cat([feat_i, feat_prop], dim=1)
             feat_prop = self.backward_trunk(feat_prop)
             out_l.insert(0, feat_prop)
@@ -1924,7 +1934,7 @@ class RealTimeBasicVSRCouplePropV3_FF(nn.Module):
             if i > 0:
                 flow = flows_forward[:, i - 1, :, :, :]
                 extra_feat = torch.cat([feat_i, flow_warp(feat_prop, flow.permute(0, 2, 3, 1))], dim=1)
-                feat_prop = self.flow_guided_dcn(feat_prop, extra_feat, flow)
+                feat_prop = self.flow_guided_dcn_bw(feat_prop, extra_feat, flow)
             feat_prop = torch.cat([feat_i, out_l[i], feat_prop], dim=1)
             feat_prop = self.forward_trunk(feat_prop)
 

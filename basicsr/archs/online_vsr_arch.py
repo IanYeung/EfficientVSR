@@ -1248,6 +1248,21 @@ class BasicUniVSRFeatPropWithSpyFlowDCN_Fast(nn.Module):
 
         return flows_forward
 
+    def get_coarse_flow(self, x):
+        b, n, c, h, w = x.size()
+
+        x_1 = F.interpolate(input=x[:, :-1, :, :, :].reshape(-1, c, h, w),
+                            scale_factor=0.5, mode='bilinear', align_corners=True)
+        x_2 = F.interpolate(input=x[:, 1:, :, :, :].reshape(-1, c, h, w),
+                            scale_factor=0.5, mode='bilinear', align_corners=True)
+
+        flows_forward = self.spynet(x_2, x_1)
+        flows_forward = F.interpolate(input=flows_forward, scale_factor=2,
+                                      mode='bilinear', align_corners=True) * 2.0
+        flows_forward = flows_forward.view(b, n - 1, 2, h, w)
+
+        return flows_forward
+
     def forward(self, x):
         """Forward function of BasicVSR.
 
@@ -2666,6 +2681,115 @@ class BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3(nn.Module):
                 out = self.lrelu(self.pixel_shuffle(self.upconv2(out)))
                 out = self.conv_last(out)
             base = F.interpolate(x_i, scale_factor=4, mode='bilinear', align_corners=False)
+            out += base
+            out_l.append(out)
+
+        if self.return_flow:
+            return torch.stack(out_l, dim=1), flows_forward
+        else:
+            return torch.stack(out_l, dim=1)
+
+
+@ARCH_REGISTRY.register()
+class BasicUniVSRFeatPropWithFastFlowDCNWithDiff(nn.Module):
+    """A recurrent network for video SR. Now only x4 is supported.
+
+    Args:
+        num_feat (int): Number of channels. Default: 64.
+        num_block (int): Number of residual blocks for each branch. Default: 15
+        spynet_path (str): Path to the pretrained weights of SPyNet. Default: None.
+    """
+
+    def __init__(self,
+                 num_feat=64,
+                 num_extract_block=0,
+                 num_block=15,
+                 deformable_groups=4,
+                 flownet_path=None,
+                 return_flow=False,
+                 one_stage_up=False):
+        super().__init__()
+        self.num_feat = num_feat
+        self.return_flow = return_flow
+        self.one_stage_up = one_stage_up
+
+        # feature extraction
+        self.feat_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
+        self.diff_extract = ConvResidualBlocks(3, num_feat, num_extract_block)
+
+        # alignment
+        self.flownet = FastFlowNet(groups=3, load_path=flownet_path)
+        self.flow_guided_dcn = FirstOrderDeformableAlignment(num_feat,
+                                                             num_feat,
+                                                             3,
+                                                             stride=1,
+                                                             padding=1,
+                                                             dilation=1,
+                                                             groups=1,
+                                                             deformable_groups=deformable_groups,
+                                                             bias=True)
+
+        # propagation
+        self.forward_trunk = ConvResidualBlocks(3 * num_feat, num_feat, num_block)
+
+        # reconstruction
+        if self.one_stage_up:
+            self.upconv = nn.Conv2d(num_feat, 3 * 16, 3, 1, 1, bias=True)
+            self.pixel_shuffle = nn.PixelShuffle(4)
+        else:
+            self.upconv1 = nn.Conv2d(num_feat, 16 * 4, 3, 1, 1, bias=True)
+            self.upconv2 = nn.Conv2d(16, 16 * 4, 3, 1, 1, bias=True)
+            self.conv_last = nn.Conv2d(16, 3, 3, 1, 1)
+            self.pixel_shuffle = nn.PixelShuffle(2)
+
+        # activation functions
+        self.lrelu = nn.LeakyReLU(negative_slope=0.1, inplace=True)
+
+    def get_flow(self, x):
+        b, n, c, h, w = x.size()
+
+        x_1 = x[:, :-1, :, :, :].reshape(-1, c, h, w)
+        x_2 = x[:, 1:, :, :, :].reshape(-1, c, h, w)
+
+        flows_forward = self.flownet(x_2, x_1).view(b, n - 1, 2, h, w)
+
+        return flows_forward
+
+    def forward(self, x):
+        """Forward function of BasicVSR.
+
+        Args:
+            x: Input frames with shape (b, n, c, h, w). n is the temporal dimension / number of frames.
+        """
+        b, n, c, h, w = x.size()
+        flows_forward = self.get_flow(x)
+
+        # backward branch
+        out_l = []
+
+        # forward branch
+        feat_prop = x.new_zeros(b, self.num_feat, h, w)
+        for i in range(0, n):
+            frame_curr = x[:, i, :, :, :]
+            frame_next = x[:, min(i+1, n-1), :, :, :]
+            feat_curr = self.feat_extract(frame_curr)
+            feat_next = self.feat_extract(frame_next) - self.diff_extract(frame_next - frame_curr)
+            if i > 0:
+                flow = flows_forward[:, i - 1, :, :, :]
+                extra_feat = torch.cat([feat_curr, flow_warp(feat_prop, flow.permute(0, 2, 3, 1))], dim=1)
+                feat_prop = self.flow_guided_dcn(feat_prop, extra_feat, flow)
+            feat_prop = torch.cat([feat_curr, feat_prop, feat_next], dim=1)
+            feat_prop = self.forward_trunk(feat_prop)
+
+            # upsample
+            out = feat_prop
+            if self.one_stage_up:
+                out = self.pixel_shuffle(self.upconv(out))
+            else:
+                out = self.lrelu(self.pixel_shuffle(self.upconv1(out)))
+                out = self.lrelu(self.pixel_shuffle(self.upconv2(out)))
+                out = self.conv_last(out)
+            base = F.interpolate(frame_curr, scale_factor=4, mode='bilinear', align_corners=False)
             out += base
             out_l.append(out)
 
