@@ -1,5 +1,5 @@
 # general settings
-name: BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3_wiOneStageUp_10BLK32CHN_Vimeo90K_BDx4
+name: BasicUniVSRFeatPropWithSpyFlowDCN_Fast_CoarseFlow+4Conv_wiOneStageUp_10BLK32CHN_Vimeo90K_BDx4
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: auto  # set num_gpu: 0 for cpu mode
@@ -98,14 +98,14 @@ datasets:
 # flownet_path: experiments/pretrained_models/flownet/maskflownet-ft-sintel.pth
 # one_stage_up: true
 
-#network_g:
-#  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast
-#  num_feat: 32
-#  num_extract_block: 0
-#  num_block: 10
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-#  one_stage_up: true
+network_g:
+  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast
+  num_feat: 32
+  num_extract_block: 0
+  num_block: 10
+  deformable_groups: 8
+  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+  one_stage_up: true
 
 #network_g:
 #  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast
@@ -114,7 +114,7 @@ datasets:
 #  num_block: 10
 #  deformable_groups: 8
 #  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
-#  one_stage_up: false
+#  one_stage_up: true
 
 #network_g:
 #  type: BasicUniVSRFeatPropWithMaskFlowDCN_Fast
@@ -240,14 +240,14 @@ datasets:
 # deformable_groups: 8
 # spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 
-network_g:
-  type: BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3
-  num_feat: 32
-  num_extract_block: 0
-  num_block: 10
-  deformable_groups: 8
-  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
-  one_stage_up: true
+#network_g:
+#  type: BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
 
 # path
 path:

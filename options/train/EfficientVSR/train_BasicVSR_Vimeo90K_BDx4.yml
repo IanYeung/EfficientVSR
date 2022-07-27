@@ -1,5 +1,5 @@
 # general settings
-name: RealTimeBasicVSRCouplePropV3_FF_WoDirectUp_32CHN05BLK_Vimeo90K_BDx4
+name: RealTimeBasicVSRCouplePropV3_FF_SpyNet_WiDirectUp_32CHN05BLK_Vimeo90K_BDx4
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: auto  # set num_gpu: 0 for cpu mode
@@ -70,14 +70,14 @@ datasets:
 #  num_feat: 32
 #  num_extract_block: 0
 #  num_block: 5
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
 #  one_stage_up: True
 #network_g:
 #  type: RealTimeBasicVSRCouplePropV2_FF
 #  num_feat: 32
 #  num_extract_block: 0
 #  num_block: 5
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
 #  one_stage_up: True
 #network_g:
 #  type: RealTimeBasicVSRCouplePropV3
@@ -85,7 +85,7 @@ datasets:
 #  num_extract_block: 0
 #  num_block: 5
 #  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  flownet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 #  one_stage_up: True
 network_g:
   type: RealTimeBasicVSRCouplePropV3_FF
@@ -93,7 +93,7 @@ network_g:
   num_extract_block: 0
   num_block: 5
   deformable_groups: 8
-  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+  flownet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
   one_stage_up: True
 
 # path
