@@ -16,3 +16,7 @@ yapf
 timm
 einops
 cupy-cuda111
+matplotlib
+fvcore
+thop
+pthflops
