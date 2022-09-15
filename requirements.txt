@@ -20,3 +20,5 @@ matplotlib
 fvcore
 thop
 pthflops
+ffmpeg-python
+imageio-ffmpeg
