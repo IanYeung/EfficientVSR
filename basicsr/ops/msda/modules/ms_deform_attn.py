@@ -500,10 +500,10 @@ class MSDeformAttnMyVersion(nn.Module):
                 'Last dim of reference_points must be 2, but get {} instead.'.format(reference_points.shape[-1])
             )
 
-        # output = multi_scale_deformable_attn_pytorch(
-        #     value, input_spatial_shapes, sampling_locations, weights
-        # )
-        output = torch.randn((N, H*W, C), device=value.device)
+        output = multi_scale_deformable_attn_pytorch(
+            value, input_spatial_shapes, sampling_locations, weights
+        )
+        # output = torch.randn((N, H*W, C), device=value.device)
 
         output = rearrange(output, 'b (h w) c -> b c h w', h=H, w=W)
         output = self.out_proj(output)
@@ -589,10 +589,10 @@ class SingleScaleDeformAttnV1(nn.Module):
                 'Last dim of reference_points must be 2, but get {} instead.'.format(reference_points.shape[-1])
             )
 
-        # output = single_scale_deformable_attn_v1(
-        #     value, input_spatial_shapes, sampling_locations
-        # )
-        output = torch.randn((N, H*W, C), device=value.device)
+        output = single_scale_deformable_attn_v1(
+            value, input_spatial_shapes, sampling_locations
+        )
+        # output = torch.randn((N, H*W, C), device=value.device)
 
         output = rearrange(output, 'b (h w) c -> b c h w', h=H, w=W)
         output = self.out_proj(output)
