@@ -2808,7 +2808,7 @@ class BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V3(nn.Module):
             if i > 0:
                 flow = flows_forward[:, i - 1, :, :, :]
                 extra_feat = torch.cat([feat_curr, flow_warp(feat_prop, flow.permute(0, 2, 3, 1))], dim=1)
-                feat_prop = self.flow_guided_dcn(feat_prop, extra_feat, flow)
+                feat_prop = self.flow_guided_dcn(feat_prop, feat_curr, extra_feat, flow)
 
             feat_prop = torch.cat([feat_curr, feat_prop], dim=1)
             feat_prop = self.forward_trunk(feat_prop)
@@ -2916,7 +2916,7 @@ class BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V4(nn.Module):
             if i > 0:
                 flow = flows_forward[:, i - 1, :, :, :]
                 extra_feat = torch.cat([feat_curr, flow_warp(feat_prop, flow.permute(0, 2, 3, 1))], dim=1)
-                feat_prop = self.flow_guided_dcn(feat_prop, extra_feat, flow)
+                feat_prop = self.flow_guided_dcn(feat_prop, feat_curr, extra_feat, flow)
 
             feat_prop = torch.cat([feat_curr, feat_prop], dim=1)
             feat_prop = self.forward_trunk(feat_prop)

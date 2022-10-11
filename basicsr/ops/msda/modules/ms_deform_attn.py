@@ -36,12 +36,12 @@ def _is_power_of_2(n):
     return (n & (n - 1) == 0) and n != 0
 
 
-def single_scale_deformable_attn_v1(value, value_spatial_shapes, sampling_locations):
+def single_scale_deformable_attn_v1(value, spatial_shapes, sampling_locations):
     """CPU version of multi-scale deformable attention.
     Args:
         value (torch.Tensor): The value has shape
             (bs, num_keys, num_heads, embed_dims//num_heads)
-        value_spatial_shapes (torch.Tensor): Spatial shape of
+        spatial_shapes (torch.Tensor): Spatial shape of
             each feature map, has shape (num_levels, 2),
             last dimension 2 represent (h, w)
         sampling_locations (torch.Tensor): The location of sampling points,
@@ -53,7 +53,7 @@ def single_scale_deformable_attn_v1(value, value_spatial_shapes, sampling_locati
     """
 
     bs, num_keys, num_heads, embed_dims = value.shape
-    H_, W_ = value_spatial_shapes[0, 0], value_spatial_shapes[0, 1]
+    H_, W_ = spatial_shapes[0, 0], spatial_shapes[0, 1]
     _, num_queries, num_heads, num_points, _ = sampling_locations.shape
     sampling_grids = 2 * sampling_locations - 1
 
@@ -100,61 +100,208 @@ def single_scale_deformable_attn_v1(value, value_spatial_shapes, sampling_locati
     return output.transpose(1, 2).contiguous()
 
 
-def single_scale_deformable_attn_v2(value, sampling_locations):
+def single_scale_deformable_attn_v2(query, value, spatial_shapes, sampling_locations):
     """CPU version of multi-scale deformable attention.
     Args:
+        query (torch.Tensor): The value has shape
+            (bs, num_keys, num_heads, embed_dims//num_heads)
         value (torch.Tensor): The value has shape
-            (bs, num_heads, embed_dims//num_heads, h, w)
+            (bs, num_keys, num_heads, embed_dims//num_heads)
+        spatial_shapes (torch.Tensor): Spatial shape of
+            each feature map, has shape (num_levels, 2),
+            last dimension 2 represent (h, w)
         sampling_locations (torch.Tensor): The location of sampling points,
             has shape
-            (bs, num_heads, num_points, h, w, 2),
+            (bs, num_queries, num_heads, num_points, 2),
             the last dimension 2 represent (x, y).
     Returns:
         torch.Tensor: has shape (bs, num_queries, embed_dims)
     """
 
-    bs, num_heads, embed_dims, h, w = value.shape
-    _, _, num_points, _, _, _ = sampling_locations.shape
+    bs, num_keys, num_heads, embed_dims = value.shape
+    H_, W_ = spatial_shapes[0, 0], spatial_shapes[0, 1]
+    _, num_queries, num_heads, num_points, _ = sampling_locations.shape
     sampling_grids = 2 * sampling_locations - 1
 
-    # bs*num_heads, embed_dims, h, w
-    value = value.view(bs * num_heads, embed_dims, h, w)
+    scale = embed_dims ** -0.5
 
-    # bs*num_heads, num_points, h, w, 2
-    sampling_grids = sampling_grids.view(bs * num_heads, num_points, h, w, 2)
+    # bs, H_*W_, num_heads, embed_dims ->
+    # bs, H_*W_, num_heads*embed_dims ->
+    # bs, num_heads*embed_dims, H_*W_ ->
+    # bs*num_heads, embed_dims, H_, W_
+    value_l_ = value.flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
+    # bs, num_queries, num_heads, num_points, 2 ->
+    # bs, num_heads, num_queries, num_points, 2 ->
+    # bs*num_heads, num_queries, num_points, 2
+    sampling_grid_l_ = sampling_grids[:, :, :].transpose(1, 2).flatten(0, 1)
+    # bs*num_heads, embed_dims, num_queries, num_points
+    sampling_values = F.grid_sample(
+        value_l_,
+        sampling_grid_l_,
+        mode='bilinear',
+        padding_mode='zeros',
+        align_corners=False
+    )
 
-    sampling_value_list = []
-    for i in range(num_points):
-        sampling_value = F.grid_sample(
-            value,
-            sampling_grids[:, i, :, :, :],
-            mode='bilinear',
-            padding_mode='zeros',
-            align_corners=False
-        )
-        sampling_value_list.append(sampling_value)
-    # bs*num_heads, embed_dims, h, w, num_points
-    sampling_values = torch.stack(sampling_value_list, dim=-1)
+    # (bs, num_keys, num_heads, embed_dims//num_heads)
+    # (bs*num_heads, num_keys, embed_dims) ->
+    # (bs*num_heads, num_keys, embed_dims, 1)
+    # (bs*num_heads, num_queries, num_points, embed_dims) @ (bs*num_heads, num_keys, embed_dims, 1) ->
+    # (bs*num_heads, num_queries, num_points, 1) ->
+    # (bs*num_heads, 1, num_queries, num_points)
+    Q = query.permute(0, 2, 1, 3)
+    Q = Q.reshape(bs * num_heads, num_keys, embed_dims, 1)
+    attention_weights = (sampling_values.permute(0, 2, 3, 1) @ Q).permute(0, 3, 1, 2)
+    attention_weights = torch.softmax(attention_weights, dim=-1) * scale
 
-    # A: bs*num_heads, embed_dims, h, w, 1
-    # B: bs*num_heads, embed_dims, h, w, num_points
+    # (bs, num_queries, num_heads, num_points) ->
+    # (bs, num_heads, num_queries, num_points) ->
+    # (bs*num_heads, 1, num_queries, num_points)
+    # attention_weights = attention_weights.transpose(1, 2).reshape(bs * num_heads, 1, num_queries, num_points)
 
-    # (bs*num_heads, h, w, num_points, embed_dims) @ (bs*num_heads, h, w, embed_dims, 1) ->
-    # (bs*num_heads, h, w, num_points, 1) ->
-    # (bs*num_heads, 1, h, w, num_points)
-    A = sampling_values.permute(0, 2, 3, 4, 1)
-    B = value.unsqueeze(-1).permute(0, 2, 3, 1, 4)
-
-    attention_weights = (A @ B).permute(0, 4, 1, 2, 3)
-    attention_weights = torch.softmax(attention_weights, dim=-1)
-
-    # (bs*num_heads, embed_dims, h, w, num_points) *
-    # (bs*num_heads,          1, h, w, num_points)
-    # ->
-    # (bs*num_heads, embed_dims, h, w)
+    # (bs*num_heads, embed_dims, num_queries, num_points) *
+    # (bs*num_heads,          1, num_queries, num_points)
     output = (sampling_values * attention_weights).sum(-1)
-    output = output.view(bs, num_heads * embed_dims, h, w)
-    return output.contiguous()
+    output = output.view(bs, num_heads * embed_dims, num_queries)
+    return output.transpose(1, 2).contiguous()
+
+
+def single_scale_deformable_attn_v3(query, key, value, spatial_shapes, sampling_locations):
+    """CPU version of multi-scale deformable attention.
+    Args:
+        query (torch.Tensor): The value has shape
+            (bs, num_keys, num_heads, embed_dims//num_heads)
+        value (torch.Tensor): The value has shape
+            (bs, num_keys, num_heads, embed_dims//num_heads)
+        spatial_shapes (torch.Tensor): Spatial shape of
+            each feature map, has shape (num_levels, 2),
+            last dimension 2 represent (h, w)
+        sampling_locations (torch.Tensor): The location of sampling points,
+            has shape
+            (bs, num_queries, num_heads, num_points, 2),
+            the last dimension 2 represent (x, y).
+    Returns:
+        torch.Tensor: has shape (bs, num_queries, embed_dims)
+    """
+
+    bs, num_keys, num_heads, embed_dims = value.shape
+    H_, W_ = spatial_shapes[0, 0], spatial_shapes[0, 1]
+    _, num_queries, num_heads, num_points, _ = sampling_locations.shape
+    sampling_grids = 2 * sampling_locations - 1
+
+    scale = embed_dims ** -0.5
+
+    # bs, num_queries, num_heads, num_points, 2 ->
+    # bs, num_heads, num_queries, num_points, 2 ->
+    # bs*num_heads, num_queries, num_points, 2
+    sampling_grid_l_ = sampling_grids[:, :, :].transpose(1, 2).flatten(0, 1)
+
+    # bs, H_*W_, num_heads, embed_dims ->
+    # bs, H_*W_, num_heads*embed_dims ->
+    # bs, num_heads*embed_dims, H_*W_ ->
+    # bs*num_heads, embed_dims, H_, W_
+    key_l_ = key.flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
+    # bs*num_heads, embed_dims, num_queries, num_points
+    sampling_keys = F.grid_sample(
+        key_l_,
+        sampling_grid_l_,
+        mode='bilinear',
+        padding_mode='zeros',
+        align_corners=False
+    )
+
+    # bs, H_*W_, num_heads, embed_dims ->
+    # bs, H_*W_, num_heads*embed_dims ->
+    # bs, num_heads*embed_dims, H_*W_ ->
+    # bs*num_heads, embed_dims, H_, W_
+    value_l_ = value.flatten(2).transpose(1, 2).reshape(bs * num_heads, embed_dims, H_, W_)
+    # bs*num_heads, embed_dims, num_queries, num_points
+    sampling_values = F.grid_sample(
+        value_l_,
+        sampling_grid_l_,
+        mode='bilinear',
+        padding_mode='zeros',
+        align_corners=False
+    )
+
+    # (bs, num_keys, num_heads, embed_dims//num_heads)
+    # (bs*num_heads, num_keys, embed_dims) ->
+    # (bs*num_heads, num_keys, embed_dims, 1)
+    # (bs*num_heads, num_queries, num_points, embed_dims) @ (bs*num_heads, num_keys, embed_dims, 1) ->
+    # (bs*num_heads, num_queries, num_points, 1) ->
+    # (bs*num_heads, 1, num_queries, num_points)
+    Q = query.permute(0, 2, 1, 3)
+    Q = Q.reshape(bs * num_heads, num_keys, embed_dims, 1)
+    attention_weights = (sampling_keys.permute(0, 2, 3, 1) @ Q).permute(0, 3, 1, 2)
+    attention_weights = torch.softmax(attention_weights, dim=-1) * scale
+
+    # (bs, num_queries, num_heads, num_points) ->
+    # (bs, num_heads, num_queries, num_points) ->
+    # (bs*num_heads, 1, num_queries, num_points)
+    # attention_weights = attention_weights.transpose(1, 2).reshape(bs * num_heads, 1, num_queries, num_points)
+
+    # (bs*num_heads, embed_dims, num_queries, num_points) *
+    # (bs*num_heads,          1, num_queries, num_points)
+    output = (sampling_values * attention_weights).sum(-1)
+    output = output.view(bs, num_heads * embed_dims, num_queries)
+    return output.transpose(1, 2).contiguous()
+
+
+# def single_scale_deformable_attn_v3(value, sampling_locations):
+#     """CPU version of multi-scale deformable attention.
+#     Args:
+#         value (torch.Tensor): The value has shape
+#             (bs, num_heads, embed_dims//num_heads, h, w)
+#         sampling_locations (torch.Tensor): The location of sampling points,
+#             has shape
+#             (bs, num_heads, num_points, h, w, 2),
+#             the last dimension 2 represent (x, y).
+#     Returns:
+#         torch.Tensor: has shape (bs, num_queries, embed_dims)
+#     """
+#
+#     bs, num_heads, embed_dims, h, w = value.shape
+#     _, _, num_points, _, _, _ = sampling_locations.shape
+#     sampling_grids = 2 * sampling_locations - 1
+#
+#     # bs*num_heads, embed_dims, h, w
+#     value = value.view(bs * num_heads, embed_dims, h, w)
+#
+#     # bs*num_heads, num_points, h, w, 2
+#     sampling_grids = sampling_grids.view(bs * num_heads, num_points, h, w, 2)
+#
+#     sampling_value_list = []
+#     for i in range(num_points):
+#         sampling_value = F.grid_sample(
+#             value,
+#             sampling_grids[:, i, :, :, :],
+#             mode='bilinear',
+#             padding_mode='zeros',
+#             align_corners=False
+#         )
+#         sampling_value_list.append(sampling_value)
+#     # bs*num_heads, embed_dims, h, w, num_points
+#     sampling_values = torch.stack(sampling_value_list, dim=-1)
+#
+#     # A: bs*num_heads, embed_dims, h, w, 1
+#     # B: bs*num_heads, embed_dims, h, w, num_points
+#
+#     # (bs*num_heads, h, w, num_points, embed_dims) @ (bs*num_heads, h, w, embed_dims, 1) ->
+#     # (bs*num_heads, h, w, num_points, 1) ->
+#     # (bs*num_heads, 1, h, w, num_points)
+#     A = sampling_values.permute(0, 2, 3, 4, 1)
+#     B = value.unsqueeze(-1).permute(0, 2, 3, 1, 4)
+#
+#     attention_weights = (A @ B).permute(0, 4, 1, 2, 3)
+#     attention_weights = torch.softmax(attention_weights, dim=-1)
+#
+#     # (bs*num_heads, embed_dims, h, w, num_points) *
+#     # (bs*num_heads,          1, h, w, num_points)
+#     # ->
+#     # (bs*num_heads, embed_dims, h, w)
+#     output = (sampling_values * attention_weights).sum(-1)
+#     output = output.view(bs, num_heads * embed_dims, h, w)
+#     return output.contiguous()
 
 
 def multi_scale_deformable_attn_pytorch(value, value_spatial_shapes,
@@ -627,7 +774,7 @@ class SingleScaleDeformAttnV2(nn.Module):
         self.n_points = n_points
 
         self.conv_offset = nn.Sequential(
-            nn.Conv2d(2 * d_model + 2, 1 * d_model, 3, 1, 1),
+            nn.Conv2d(2 * d_model, 1 * d_model, 3, 1, 1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(1 * d_model, 1 * d_model, 3, 1, 1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -635,7 +782,7 @@ class SingleScaleDeformAttnV2(nn.Module):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(1 * d_model, n_heads * n_points * 2, 3, 1, 1),
         )
-        # self.val_proj = nn.Conv2d(d_model, d_model, 3, 1, 1)
+        self.que_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
         self.val_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
         self.out_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
 
@@ -644,11 +791,17 @@ class SingleScaleDeformAttnV2(nn.Module):
     def init_offset(self):
         constant_init(self.conv_offset[-1], val=0, bias=0)
 
-    def forward(self, query, reference_points, value, input_spatial_shapes, input_level_start_index,
+    def forward(self, stacked_feat, reference_points, query, value, input_spatial_shapes, input_level_start_index=None,
                 input_padding_mask=None, flow=None):
 
         N, C, H, W = value.shape
         assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == H * W
+
+        query = self.que_proj(query)
+        query = query.flatten(2).transpose(1, 2)
+        if input_padding_mask is not None:
+            query = query.masked_fill(input_padding_mask[..., None], float(0))
+        query = query.view(N, H * W, self.n_heads, self.d_model // self.n_heads)
 
         value = self.val_proj(value)
         value = value.flatten(2).transpose(1, 2)
@@ -656,7 +809,7 @@ class SingleScaleDeformAttnV2(nn.Module):
             value = value.masked_fill(input_padding_mask[..., None], float(0))
         value = value.view(N, H * W, self.n_heads, self.d_model // self.n_heads)
 
-        offsets = self.conv_offset(torch.cat([query, flow], dim=1))
+        offsets = self.conv_offset(stacked_feat)
 
         # clamp offsets
         if self.max_residue_magnitude:
@@ -678,8 +831,8 @@ class SingleScaleDeformAttnV2(nn.Module):
                 'Last dim of reference_points must be 2, but get {} instead.'.format(reference_points.shape[-1])
             )
 
-        output = single_scale_deformable_attn_v1(
-            value, input_spatial_shapes, sampling_locations
+        output = single_scale_deformable_attn_v2(
+            query, value, input_spatial_shapes, sampling_locations
         )
 
         output = rearrange(output, 'b (h w) c -> b c h w', h=H, w=W)
@@ -692,7 +845,7 @@ class SingleScaleDeformAttnV3(nn.Module):
 
     def __init__(self, d_model=256, n_heads=8, n_points=4, max_residue_magnitude=10):
         """
-        Single-Scale Deformable Attention Module
+        Multi-Scale Deformable Attention Module
         :param d_model      hidden dimension
         :param n_heads      number of attention heads
         :param n_points     number of sampling points per attention head per feature level
@@ -723,6 +876,8 @@ class SingleScaleDeformAttnV3(nn.Module):
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
             nn.Conv2d(1 * d_model, n_heads * n_points * 2, 3, 1, 1),
         )
+        self.que_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
+        self.key_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
         self.val_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
         self.out_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
 
@@ -731,15 +886,32 @@ class SingleScaleDeformAttnV3(nn.Module):
     def init_offset(self):
         constant_init(self.conv_offset[-1], val=0, bias=0)
 
-    def forward(self, query, value, reference_points, flow=None):
+    def forward(self, stacked_feat, reference_points, query, value, input_spatial_shapes, input_level_start_index=None,
+                input_padding_mask=None, flow=None):
 
         N, C, H, W = value.shape
-        device = value.device
+        assert (input_spatial_shapes[:, 0] * input_spatial_shapes[:, 1]).sum() == H * W
+
+        query = self.que_proj(query)
+        query = query.flatten(2).transpose(1, 2)
+        if input_padding_mask is not None:
+            query = query.masked_fill(input_padding_mask[..., None], float(0))
+        query = query.view(N, H * W, self.n_heads, self.d_model // self.n_heads)
+
+        key = self.key_proj(value)
+        key = key.flatten(2).transpose(1, 2)
+        if input_padding_mask is not None:
+            key = key.masked_fill(input_padding_mask[..., None], float(0))
+        key = key.view(N, H * W, self.n_heads, self.d_model // self.n_heads)
 
         value = self.val_proj(value)
-        value = value.view(N, self.n_heads, self.d_model // self.n_heads, H, W)
+        value = value.flatten(2).transpose(1, 2)
+        if input_padding_mask is not None:
+            value = value.masked_fill(input_padding_mask[..., None], float(0))
+        value = value.view(N, H * W, self.n_heads, self.d_model // self.n_heads)
 
-        offsets = self.conv_offset(query)
+        offsets = self.conv_offset(stacked_feat)
+
         # clamp offsets
         if self.max_residue_magnitude:
             offsets = self.max_residue_magnitude * torch.tanh(offsets)
@@ -747,22 +919,104 @@ class SingleScaleDeformAttnV3(nn.Module):
         if flow is not None:
             offsets = offsets + flow.repeat(1, offsets.size(1) // 2, 1, 1)
 
-        offsets = offsets.view(N, self.n_heads, self.n_points, H, W, 2).contiguous()  # (B, Nh, Np, H, W, 2)
+        offsets = offsets.flatten(2).transpose(1, 2)    # (B, H*W, Nh*Np*2)
+        offsets = offsets.view(N, H * W, self.n_heads, self.n_points, 2).contiguous()  # (B, H*W, Nh, Np, 2)
 
-        # (B, Nh, Np, h, w, 2)
+        # N, Len_q, n_heads, n_points, 2
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.stack([torch.tensor(W, dtype=torch.long, device=device),
-                                             torch.tensor(H, dtype=torch.long, device=device)], -1)
-            offset_normalizer = offset_normalizer[None, None, None, None, None, :]
-            sampling_locations = reference_points[:, None, None, :, :, :] + offsets / offset_normalizer
+            offset_normalizer = torch.stack([input_spatial_shapes[..., 1], input_spatial_shapes[..., 0]], -1)
+            sampling_locations = reference_points[:, :, :, None, :] + \
+                                 offsets / offset_normalizer[None, None, :, None, :]
         else:
             raise ValueError(
                 'Last dim of reference_points must be 2, but get {} instead.'.format(reference_points.shape[-1])
             )
 
-        output = single_scale_deformable_attn_v2(
-            value, sampling_locations
+        output = single_scale_deformable_attn_v3(
+            query, key, value, input_spatial_shapes, sampling_locations
         )
+
+        output = rearrange(output, 'b (h w) c -> b c h w', h=H, w=W)
         output = self.out_proj(output)
 
         return output
+
+
+# class SingleScaleDeformAttnV3(nn.Module):
+#
+#     def __init__(self, d_model=256, n_heads=8, n_points=4, max_residue_magnitude=10):
+#         """
+#         Single-Scale Deformable Attention Module
+#         :param d_model      hidden dimension
+#         :param n_heads      number of attention heads
+#         :param n_points     number of sampling points per attention head per feature level
+#         """
+#         super().__init__()
+#         if d_model % n_heads != 0:
+#             raise ValueError('d_model must be divisible by n_heads, but got {} and {}'.format(d_model, n_heads))
+#         _d_per_head = d_model // n_heads
+#         # you'd better set _d_per_head to a power of 2 which is more efficient in our CUDA implementation
+#         if not _is_power_of_2(_d_per_head):
+#             warnings.warn(
+#                 "You'd better set d_model in MSDeformAttn to make the dimension of each attention head a power of 2,"
+#                 "which is more efficient in our CUDA implementation."
+#             )
+#
+#         self.max_residue_magnitude = max_residue_magnitude
+#
+#         self.d_model = d_model
+#         self.n_heads = n_heads
+#         self.n_points = n_points
+#
+#         self.conv_offset = nn.Sequential(
+#             nn.Conv2d(2 * d_model, 1 * d_model, 3, 1, 1),
+#             nn.LeakyReLU(negative_slope=0.1, inplace=True),
+#             nn.Conv2d(1 * d_model, 1 * d_model, 3, 1, 1),
+#             nn.LeakyReLU(negative_slope=0.1, inplace=True),
+#             nn.Conv2d(1 * d_model, 1 * d_model, 3, 1, 1),
+#             nn.LeakyReLU(negative_slope=0.1, inplace=True),
+#             nn.Conv2d(1 * d_model, n_heads * n_points * 2, 3, 1, 1),
+#         )
+#         self.val_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
+#         self.out_proj = nn.Conv2d(d_model, d_model, 1, 1, 0)
+#
+#         self.init_offset()
+#
+#     def init_offset(self):
+#         constant_init(self.conv_offset[-1], val=0, bias=0)
+#
+#     def forward(self, query, value, reference_points, flow=None):
+#
+#         N, C, H, W = value.shape
+#         device = value.device
+#
+#         value = self.val_proj(value)
+#         value = value.view(N, self.n_heads, self.d_model // self.n_heads, H, W)
+#
+#         offsets = self.conv_offset(query)
+#         # clamp offsets
+#         if self.max_residue_magnitude:
+#             offsets = self.max_residue_magnitude * torch.tanh(offsets)
+#         # flow guided
+#         if flow is not None:
+#             offsets = offsets + flow.repeat(1, offsets.size(1) // 2, 1, 1)
+#
+#         offsets = offsets.view(N, self.n_heads, self.n_points, H, W, 2).contiguous()  # (B, Nh, Np, H, W, 2)
+#
+#         # (B, Nh, Np, h, w, 2)
+#         if reference_points.shape[-1] == 2:
+#             offset_normalizer = torch.stack([torch.tensor(W, dtype=torch.long, device=device),
+#                                              torch.tensor(H, dtype=torch.long, device=device)], -1)
+#             offset_normalizer = offset_normalizer[None, None, None, None, None, :]
+#             sampling_locations = reference_points[:, None, None, :, :, :] + offsets / offset_normalizer
+#         else:
+#             raise ValueError(
+#                 'Last dim of reference_points must be 2, but get {} instead.'.format(reference_points.shape[-1])
+#             )
+#
+#         output = single_scale_deformable_attn_v3(
+#             value, sampling_locations
+#         )
+#         output = self.out_proj(output)
+#
+#         return output

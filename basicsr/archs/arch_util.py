@@ -17,7 +17,9 @@ from torch.utils.checkpoint import checkpoint
 from basicsr.ops.cot import \
     CotLayer, CoXtLayer, CotLayerNoNorm, CoXtLayerNoNorm, CotLayerWithLayerNorm, CoXtLayerWithLayerNorm
 from basicsr.ops.dcn import \
-    ModulatedDeformConvPack, ModulatedDeformConv, modulated_deform_conv
+    ModulatedDeformConvPack, ModulatedDeformConv, modulated_deform_conv, \
+    DeformConvPack, DeformConv, deform_conv
+
 from basicsr.ops.msda import \
     MSDeformAttn, MSDeformAttnMyVersion, SingleScaleDeformAttnV1, SingleScaleDeformAttnV2, SingleScaleDeformAttnV3
 from basicsr.utils import get_root_logger
@@ -850,20 +852,6 @@ class FirstOrderDeformableAlignment(ModulatedDeformConvPack):
 
         super(FirstOrderDeformableAlignment, self).__init__(*args, **kwargs)
 
-        self.conv_offset = nn.Sequential(
-            nn.Conv2d(2 * self.out_channels + 2, self.out_channels, 3, 1, 1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(self.out_channels, 27 * self.groups, 3, 1, 1),
-        )
-
         # self.conv_offset = nn.Sequential(
         #     nn.Conv2d(2 * self.out_channels + 2, self.out_channels, 3, 1, 1),
         #     nn.LeakyReLU(negative_slope=0.1, inplace=True),
@@ -871,8 +859,22 @@ class FirstOrderDeformableAlignment(ModulatedDeformConvPack):
         #     nn.LeakyReLU(negative_slope=0.1, inplace=True),
         #     nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
         #     nn.LeakyReLU(negative_slope=0.1, inplace=True),
+        #     nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+        #     nn.LeakyReLU(negative_slope=0.1, inplace=True),
+        #     nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+        #     nn.LeakyReLU(negative_slope=0.1, inplace=True),
         #     nn.Conv2d(self.out_channels, 27 * self.groups, 3, 1, 1),
         # )
+
+        self.conv_offset = nn.Sequential(
+            nn.Conv2d(2 * self.out_channels + 2, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, 27 * self.groups, 3, 1, 1),
+        )
 
         # self.conv_offset = nn.Sequential(
         #     nn.Conv2d(2 * self.out_channels + 2, self.out_channels, 3, 1, 1),
@@ -908,6 +910,62 @@ class FirstOrderDeformableAlignment(ModulatedDeformConvPack):
                                      self.dilation, self.groups,
                                      self.groups)
         # return self.conv_output(x)
+
+
+class FirstOrderDeformableAlignmentNoMask(ModulatedDeformConv):
+    """First-order deformable alignment module.
+
+    Args:
+        in_channels (int): Same as nn.Conv2d.
+        out_channels (int): Same as nn.Conv2d.
+        kernel_size (int or tuple[int]): Same as nn.Conv2d.
+        stride (int or tuple[int]): Same as nn.Conv2d.
+        padding (int or tuple[int]): Same as nn.Conv2d.
+        dilation (int or tuple[int]): Same as nn.Conv2d.
+        groups (int): Same as nn.Conv2d.
+        bias (bool or str): If specified as `auto`, it will be decided by the
+            norm_cfg. Bias will be set as True if norm_cfg is None, otherwise
+            False.
+        max_residue_magnitude (int): The maximum magnitude of the offset
+            residue (Eq. 6 in paper). Default: 10.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.max_residue_magnitude = kwargs.pop('max_residue_magnitude', 10)
+
+        super(FirstOrderDeformableAlignmentNoMask, self).__init__(*args, **kwargs)
+
+        self.conv_offset = nn.Sequential(
+            nn.Conv2d(2 * self.out_channels + 2, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, self.out_channels, 3, 1, 1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(self.out_channels, 27 * self.groups, 3, 1, 1),
+        )
+
+        self.init_offset()
+
+    def init_offset(self):
+        constant_init(self.conv_offset[-1], val=0, bias=0)
+
+    def forward(self, x, extra_feat, flow):
+        extra_feat = torch.cat([extra_feat, flow], dim=1)
+        out = self.conv_offset(extra_feat)
+        o1, o2, mask = torch.chunk(out, 3, dim=1)
+
+        # offset + flow
+        offset = self.max_residue_magnitude * torch.tanh(torch.cat((o1, o2), dim=1))
+        offset = offset + flow.flip(1).repeat(1, offset.size(1) // 2, 1, 1)
+
+        mask = torch.ones_like(mask)
+
+        return modulated_deform_conv(x, offset, mask, self.weight, self.bias,
+                                     self.stride, self.padding,
+                                     self.dilation, self.groups,
+                                     self.groups)
 
 
 class BwFlowGuidedFirstOrderDeformableAlignment(ModulatedDeformConvPack):
@@ -1381,7 +1439,7 @@ class FlowGuidedDeformAttnAlignV3(nn.Module):
         reference_points = reference_points[:, :, None] * valid_ratios[:, None]
         return reference_points
 
-    def forward(self, nbr_fea, ext_fea, flow):
+    def forward(self, nbr_fea, cur_fea, ext_fea, flow):
         b, c, h, w = nbr_fea.shape
         device = nbr_fea.device
 
@@ -1392,7 +1450,7 @@ class FlowGuidedDeformAttnAlignV3(nn.Module):
         valid_ratio = torch.unsqueeze(self.get_valid_ratio(mask), dim=1)
         ref_point = self.get_reference_points(spatial_shapes, valid_ratio, device=device)
 
-        output = self.ms_deform_att(ext_fea, ref_point, nbr_fea, spatial_shapes, level_start_index,
+        output = self.ms_deform_att(ext_fea, ref_point, cur_fea, nbr_fea, spatial_shapes, level_start_index,
                                     input_padding_mask=mask.flatten(1), flow=flow)
 
         return output
@@ -1402,30 +1460,46 @@ class FlowGuidedDeformAttnAlignV4(nn.Module):
 
     def __init__(self, d_model=256, n_levels=4, n_heads=8, n_points=4, max_residue_magnitude=10):
         super().__init__()
-        self.ss_deform_att = SingleScaleDeformAttnV3(d_model=d_model,
+        self.ms_deform_att = SingleScaleDeformAttnV3(d_model=d_model,
                                                      n_heads=n_heads,
                                                      n_points=n_points,
                                                      max_residue_magnitude=max_residue_magnitude)
 
-    def get_ref_points(self, H_, W_, device):
+    def get_valid_ratio(self, mask):
+        _, H, W = mask.shape
+        valid_H = torch.sum(~mask[:, :, 0], 1)
+        valid_W = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_h = valid_H.float() / H
+        valid_ratio_w = valid_W.float() / W
+        valid_ratio = torch.stack([valid_ratio_w, valid_ratio_h], -1)
+        return valid_ratio
 
-        ref_y, ref_x = torch.meshgrid(
-            torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
-            torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device)
-        )
-        ref = torch.stack((ref_x, ref_y), -1)
-        ref[..., 0].div_(W_)  #.mul_(2).sub_(1)
-        ref[..., 1].div_(H_)  #.mul_(2).sub_(1)
-        ref = ref[None, ...]
+    def get_reference_points(self, spatial_shapes, valid_ratios, device):
+        reference_points_list = []
+        for lvl, (H_, W_) in enumerate(spatial_shapes):
+            ref_y, ref_x = torch.meshgrid(torch.linspace(0.5, H_ - 0.5, H_, dtype=torch.float32, device=device),
+                                          torch.linspace(0.5, W_ - 0.5, W_, dtype=torch.float32, device=device))
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * H_)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * W_)
+            ref = torch.stack((ref_x, ref_y), -1)
+            reference_points_list.append(ref)
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:, :, None] * valid_ratios[:, None]
+        return reference_points
 
-        return ref
-
-    def forward(self, nbr_fea, ext_fea, flow):
+    def forward(self, nbr_fea, cur_fea, ext_fea, flow):
         b, c, h, w = nbr_fea.shape
         device = nbr_fea.device
 
-        ref_point = self.get_ref_points(h, w, device=device)
-        output = self.ss_deform_att(ext_fea, nbr_fea, ref_point, flow=flow)
+        mask = (torch.zeros(b, h, w) > 1).to(device)
+
+        spatial_shapes = torch.as_tensor([(h, w)], dtype=torch.long).to(device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratio = torch.unsqueeze(self.get_valid_ratio(mask), dim=1)
+        ref_point = self.get_reference_points(spatial_shapes, valid_ratio, device=device)
+
+        output = self.ms_deform_att(ext_fea, ref_point, cur_fea, nbr_fea, spatial_shapes, level_start_index,
+                                    input_padding_mask=mask.flatten(1), flow=flow)
 
         return output
 
@@ -1669,25 +1743,25 @@ class DropPath(nn.Module):
 
 
 if __name__ == '__main__':
-    device = torch.device('cuda')
+    import numpy as np
+
+    device = torch.device('cuda:7')
 
     # inp = torch.randn(4, 32, 128, 128).to(device)
     # net = make_layer(CoTResBottleneck, 10, inplanes=32, planes=32).to(device)
     # out = net(inp)
     # print(out.shape)
 
-    inp1 = torch.randn(1, 32, 64, 64).to(device)
-    inp2 = torch.randn(1, 64, 64, 64).to(device)
-    flow = torch.randn(1, 2, 64, 64).to(device)
-    att = FirstOrderDeformableAlignmentV2(32, 32, 3,
-                                          stride=1,
-                                          padding=1,
-                                          dilation=1,
-                                          groups=1,
-                                          deformable_groups=8,
-                                          bias=True).to(device)
-    for i in range(10):
-        out = att(inp1, inp2, flow)
+    # inp1 = torch.randn(1, 32, 64, 64).to(device)
+    # inp2 = torch.randn(1, 64, 64, 64).to(device)
+    # flow = torch.randn(1, 2, 64, 64).to(device)
+    module = FirstOrderDeformableAlignment(32, 32, 3,
+                                           stride=1,
+                                           padding=1,
+                                           dilation=1,
+                                           groups=1,
+                                           deformable_groups=8,
+                                           bias=True).to(device)
 
     # interpolator = FlowGuidedDeformConvInterpolation(inp_channels=32, out_channels=32, deformable_groups=8, max_residue_magnitude=10).to(device)
     # interpolator = FlowGuidedDeformAttnInterpolation(inp_channels=32, out_channels=32).to(device)
@@ -1701,3 +1775,41 @@ if __name__ == '__main__':
     #
     # out = interpolator(inp1, inp2, ext1, ext2, flow1, flow2)
     # print(out.shape)
+
+    b, c, h, w = 1, 32, 2160 // 4, 3840 // 4
+
+    module.eval()
+    module.to(device)
+
+    # INIT LOGGERS
+    starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    repetitions = 20
+    timings = np.zeros((repetitions, 1))
+
+    # GPU-WARM-UP
+    with torch.no_grad():
+        for _ in range(2):
+            dummy_input1 = torch.randn(b, c * 1, h, w).to(device)
+            dummy_input2 = torch.randn(b, c * 2, h, w).to(device)
+            flow = torch.randn(b, 2, h, w).to(device)
+            _ = module(dummy_input1, dummy_input2, flow)
+            del dummy_input1
+            torch.cuda.empty_cache()
+
+    # MEASURE PERFORMANCE
+    with torch.no_grad():
+        for rep in range(repetitions):
+            dummy_input1 = torch.randn(b, c * 1, h, w).to(device)
+            dummy_input2 = torch.randn(b, c * 2, h, w).to(device)
+            flow = torch.randn(b, 2, h, w).to(device)
+            starter.record()
+            _ = module(dummy_input1, dummy_input2, flow)
+            ender.record()
+            # WAIT FOR GPU SYNC
+            torch.cuda.synchronize()
+            curr_time = starter.elapsed_time(ender)
+            timings[rep] = curr_time
+    mean_syn = np.sum(timings) / repetitions
+    std_syn = np.std(timings)
+    print('Inference time: {:.4f} ms.'.format(mean_syn))
+    print('Inference fps: {:.4f}.'.format(1000 / (mean_syn)))
