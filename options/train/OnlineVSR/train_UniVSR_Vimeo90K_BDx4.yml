@@ -1,5 +1,5 @@
 # general settings
-name: BasicUniVSRFeatPropWithSpyFlowDCN_Fast_CoarseFlow+4Conv_wiOneStageUp_10BLK32CHN_Vimeo90K_BDx4
+name: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V4_wiOneStageUp_30BLK64CHN_Vimeo90K_BDx4_4Points
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: auto  # set num_gpu: 0 for cpu mode
@@ -98,20 +98,38 @@ datasets:
 # flownet_path: experiments/pretrained_models/flownet/maskflownet-ft-sintel.pth
 # one_stage_up: true
 
-network_g:
-  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast
-  num_feat: 32
-  num_extract_block: 0
-  num_block: 10
-  deformable_groups: 8
-  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-  one_stage_up: true
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
+#  deformable_groups: 8
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
 
 #network_g:
 #  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast
-#  num_feat: 32
+#  num_feat: 64
 #  num_extract_block: 0
-#  num_block: 10
+#  num_block: 30
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast_woDCNMask
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
+#  deformable_groups: 8
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast_woDCNMask
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
 #  deformable_groups: 8
 #  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
 #  one_stage_up: true
@@ -136,113 +154,54 @@ network_g:
 #   max_residue_magnitude: 10
 #   spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 
-#network_g:
-#  type: BasicUniVSRFeatPropWithFlowDeformAtt_ShuffleAtt_Fast
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
-#  num_levels: 1
-#  num_heads: 8
-#  num_points: 9
-#  window_size: 8
-#  mlp_ratio: 1
-#  max_residue_magnitude: 10
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropResBlock
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropRCAB
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropIMDB
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 15
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropEarFusion_Fast
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropCrossAttFusion_Fast
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
-#  num_heads: 4
-#  window_size: 4
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropMidFusion
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block_1: 10
-#  num_block_2: 10
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRDualFeatProp
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block_1: 10
-#  num_block_2: 10
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-# type: BasicUniVSRFeatPropTemporalAttFusion
-# num_feat: 64
-# num_extract_block: 0
-# num_block: 20
-# num_heads: 2
-# deformable_groups: 8
-# spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-# type: BasicUniVSRFeatPropCoTSTAttFusion
-# num_feat: 64
-# num_extract_block: 0
-# num_block: 20
-# num_heads: 2
-# deformable_groups: 8
-# spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-# type: BasicUniVSRFeatPropSepSTSFusion
-# num_feat: 64
-# num_extract_block: 0
-# num_block: 20
-# num_heads: 1
-# depth: 1
-# depth_window_size: [1, 4, 4]
-# point_window_size: [2, 1, 1]
-# mlp_ratio: 2
-# deformable_groups: 8
-# spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+network_g:
+  type: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V4
+  num_feat: 64
+  num_extract_block: 0
+  num_block: 30
+  num_levels: 1
+  num_heads: 8
+  num_points: 4
+  max_residue_magnitude: 10
+  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+  one_stage_up: true
 
 #network_g:
 #  type: BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3
 #  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: OnlineSwinVSRFeatPropWithSpyFlowDCN_V1
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  repeats: 5
+#  window_size: 8
+#  mlp_ratio: 2
+#  num_heads: 2
+#  deformable_groups: 8
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlowDCN_V2
+#  num_feat_prop: 32
+#  num_feat_rcon: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithFastFlowDCN_V2
+#  num_feat_prop: 32
+#  num_feat_rcon: 32
 #  num_extract_block: 0
 #  num_block: 10
 #  deformable_groups: 8
@@ -266,11 +225,11 @@ train:
 
   scheduler:
     type: CosineAnnealingRestartLR
-    periods: [300000]
-    restart_weights: [1]
+    periods: [300000, 300000]
+    restart_weights: [1, 1]
     eta_min: !!float 1e-7
 
-  total_iter: 300000
+  total_iter: 600000
   warmup_iter: -1  # no warm up
   fix_flow: 5000
   flow_lr_mul: 0.125
@@ -295,7 +254,7 @@ val:
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 5e3
+  save_checkpoint_freq: !!float 1e4
   use_tb_logger: true
   wandb:
     project: ~

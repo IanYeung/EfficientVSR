@@ -1,24 +1,33 @@
-name: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_9Points_Train_Vimeo90K_Test_RecurrentDataset_BDx4
+name: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_Train_REDS_Test_REDS4_BIx4
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: 1  # set num_gpu: 0 for cpu mode
 manual_seed: 0
 
 datasets:
-  test_1:
-    name: Vid4
+#  test_1:
+#    name: Vid4
+#    type: VideoRecurrentTestDataset
+#    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/Vid4/GT
+#    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/Vid4/Bicubic4xLR
+#    cache_data: True
+#    io_backend:
+#      type: disk
+#    num_frame: -1  # not needed
+#  test_2:
+#    name: UDM10
+#    type: VideoRecurrentTestDataset
+#    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/UDM10/GT
+#    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/UDM10/Bicubic4xLR
+#    cache_data: True
+#    io_backend:
+#      type: disk
+#    num_frame: -1  # not needed
+  test_3:
+    name: REDS4
     type: VideoRecurrentTestDataset
-    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/Vid4/GT
-    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/Vid4/Gaussian4xLR
-    cache_data: True
-    io_backend:
-      type: disk
-    num_frame: -1  # not needed
-  test_2:
-    name: UDM10
-    type: VideoRecurrentTestDataset
-    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/UDM10/GT
-    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/UDM10/Gaussian4xLR
+    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/REDS4/GT
+    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/REDS4/Bicubic4xLR
     cache_data: True
     io_backend:
       type: disk
@@ -40,14 +49,15 @@ network_g:
   num_block: 30
   num_levels: 1
   num_heads: 8
-  num_points: 9
+  num_points: 4
   max_residue_magnitude: 10
   flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
   one_stage_up: true
 
+
 # path
 path:
-  pretrain_network_g: experiments/BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_Vimeo90K_BDx4_9Points/models/net_g_600000.pth
+  pretrain_network_g: experiments/BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_REDS_BIx4_4Points/models/net_g_600000.pth
   strict_load_g: true
 
 # validation settings
@@ -59,8 +69,8 @@ val:
     psnr: # metric name, can be arbitrary
       type: calculate_psnr
       crop_border: 0
-      test_y_channel: true
+      test_y_channel: false
     ssim:
       type: calculate_ssim
       crop_border: 0
-      test_y_channel: true
+      test_y_channel: false

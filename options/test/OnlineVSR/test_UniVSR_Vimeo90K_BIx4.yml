@@ -1,4 +1,4 @@
-name: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_Vimeo90K_BDx4_4Points_Train_Vimeo90K_Test_Vimeo90K_BDx4
+name: BasicUniVSRFeatPropWithFastFlowDCN_Fast_20BLK_Vimeo90K_BIx4
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: 1  # set num_gpu: 0 for cpu mode
@@ -8,8 +8,8 @@ datasets:
   test_1:  # the 1st test dataset
     name: Vimeo90K
     type: VideoTestVimeo90KDataset
-    dataroot_gt: /data2/yangxi/datasets/Vimeo90k/vimeo_septuplet/sequences
-    dataroot_lq: /data2/yangxi/datasets/Vimeo90k/vimeo_septuplet_GaussianLRx4/sequences
+    dataroot_gt: /home/xiyang/Datasets/Vimeo90k/vimeo_septuplet/sequences
+    dataroot_lq: /home/xiyang/Datasets/Vimeo90k/vimeo_septuplet_BicubicLRx4/sequences
     meta_info_file: basicsr/data/meta_info/meta_info_Vimeo90K_test_GT.txt
     cache_data: false
     io_backend:
@@ -25,35 +25,24 @@ datasets:
 #  deformable_groups: 8
 #  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 #  one_stage_up: true
-#network_g:
-#  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 30
-#  deformable_groups: 8
-#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
-#  one_stage_up: true
 network_g:
-  type: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2
+  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast
   num_feat: 64
   num_extract_block: 0
   num_block: 30
-  num_levels: 1
-  num_heads: 8
-  num_points: 9
-  max_residue_magnitude: 10
+  deformable_groups: 8
   flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
   one_stage_up: true
 
 # path
 path:
-  pretrain_network_g: experiments/BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V2_wiOneStageUp_30BLK64CHN_Vimeo90K_BDx4_4Points/models/net_g_600000.pth
+  pretrain_network_g: experiments/pretrained_models/OnlineVSR/BasicUniVSRFeatPropWithFastFlowDCN_Fast_20BLK_Vimeo90K_BDx4.pth
   strict_load_g: true
 
 # validation settings
 val:
-  save_img: false
-  flip_seq: false
+  save_img: true
+  flip_seq: true
   center_frame_only: true
   suffix: ~  # add suffix to saved images, if None, use exp name
 

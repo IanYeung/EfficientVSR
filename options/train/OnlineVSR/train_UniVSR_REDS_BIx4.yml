@@ -1,5 +1,5 @@
 # general settings
-name: BasicUniVSRFeatPropWithFlowDeformAtt_Fast_V1_20BLK_REDS_BIx4_Local_9Point
+name: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V4_wiOneStageUp_30BLK64CHN_REDS_BIx4_4Points
 model_type: VideoRecurrentModel
 scale: 4
 num_gpu: auto  # official: 8 GPUs
@@ -10,8 +10,8 @@ datasets:
   train:
     name: REDS
     type: REDSRecurrentDataset
-    dataroot_gt: /home/xiyang/Datasets/REDS/train_sharp_sub
-    dataroot_lq: /home/xiyang/Datasets/REDS/train_sharp_bicubic_sub
+    dataroot_gt: /data2/yangxi/datasets/REDS/train_sharp_sub
+    dataroot_lq: /data2/yangxi/datasets/REDS/train_sharp_bicubic_sub
     meta_info_file: basicsr/data/meta_info/meta_info_REDS_GT_sub.txt
     val_partition: REDS4  # set to 'official' when use the official validation partition
     test_mode: false
@@ -36,8 +36,8 @@ datasets:
   val:
     name: REDS4
     type: VideoRecurrentTestDataset
-    dataroot_gt: /home/xiyang/Datasets/VSR-TEST/REDS4/GT
-    dataroot_lq: /home/xiyang/Datasets/VSR-TEST/REDS4/Bicubic4xLR
+    dataroot_gt: /data2/yangxi/datasets/VSR-TEST/REDS4/GT
+    dataroot_lq: /data2/yangxi/datasets/VSR-TEST/REDS4/Bicubic4xLR
 
     cache_data: true
     io_backend:
@@ -47,48 +47,139 @@ datasets:
 
 #network structures
 #network_g:
-#  type: BasicUniVSRFeatPropWithPCD
+#  type: BasicUniVSRFeatPropWithPCDAlign
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithoutAlign_Fast
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 30
+#  one_stage_up: true
+
+# network_g:
+#  type: BasicUniVSRFeatPropWithLocalCorr_Fast
 #  num_feat: 64
 #  num_extract_block: 0
 #  num_block: 20
-#  deformable_groups: 8
+#  nbr_size: 9
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlow_FGAC
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
 
 #network_g:
 #  type: BasicUniVSRFeatPropWithSpyFlow_Fast
-#  num_feat: 64
+#  num_feat: 32
 #  num_extract_block: 0
-#  num_block: 20
+#  num_block: 10
 #  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
 
 #network_g:
-#  type: BasicUniVSRFeatPropWithFlowDCN
+# type: BasicUniVSRFeatPropWithFastFlow_Fast
+# num_feat: 32
+# num_extract_block: 0
+# num_block: 10
+# flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+# one_stage_up: true
+
+#network_g:
+# type: BasicUniVSRFeatPropWithMaskFlow_Fast
+# num_feat: 32
+# num_extract_block: 0
+# num_block: 10
+# flownet_path: experiments/pretrained_models/flownet/maskflownet-ft-sintel.pth
+# one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast
 #  num_feat: 64
 #  num_extract_block: 0
-#  num_block: 20
+#  num_block: 30
 #  deformable_groups: 8
 #  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
 
 #network_g:
-#  type: BasicUniVSRFeatPropWithFlowDeformAtt
+#  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithSpyFlowDCN_Fast_woDCNMask
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
+#  deformable_groups: 8
+#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithFastFlowDCN_Fast_woDCNMask
+#  num_feat: 64
+#  num_extract_block: 0
+#  num_block: 30
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithMaskFlowDCN_Fast
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/maskflownet-ft-sintel.pth
+#  one_stage_up: true
+
+network_g:
+  type: BasicUniVSRFeatPropWithFastFlowDeformAtt_Fast_V4
+  num_feat: 64
+  num_extract_block: 0
+  num_block: 30
+  num_levels: 1
+  num_heads: 8
+  num_points: 4
+  max_residue_magnitude: 10
+  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+  one_stage_up: true
+
+# network_g:
+#   type: BasicUniVSRFeatPropWithFlowDeformAtt_Fast_V2
+#   num_feat: 64
+#   num_extract_block: 0
+#   num_block: 20
+#   num_levels: 1
+#   num_heads: 8
+#   num_points: 9
+#   max_residue_magnitude: 10
+#   spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
+
+#network_g:
+#  type: BasicUniVSRFeatPropWithFlowDeformAtt_ShuffleAtt_Fast
 #  num_feat: 64
 #  num_extract_block: 0
 #  num_block: 20
 #  num_levels: 1
 #  num_heads: 8
-#  num_points: 4
+#  num_points: 9
+#  window_size: 8
+#  mlp_ratio: 1
 #  max_residue_magnitude: 10
 #  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-network_g:
-  type: BasicUniVSRFeatPropWithFlowDeformAtt_Fast_V1
-  num_feat: 64
-  num_extract_block: 0
-  num_block: 20
-  num_levels: 1
-  num_heads: 8
-  num_points: 9
-  max_residue_magnitude: 10
-  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 
 #network_g:
 #  type: BasicUniVSRFeatPropResBlock
@@ -111,14 +202,6 @@ network_g:
 #  num_feat: 64
 #  num_extract_block: 0
 #  num_block: 15
-#  deformable_groups: 8
-#  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
-
-#network_g:
-#  type: BasicUniVSRFeatPropEarFusion_Fast
-#  num_feat: 64
-#  num_extract_block: 0
-#  num_block: 20
 #  deformable_groups: 8
 #  spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 
@@ -189,6 +272,15 @@ network_g:
 # deformable_groups: 8
 # spynet_path: experiments/pretrained_models/flownet/spynet_sintel_final-3d2a1287.pth
 
+#network_g:
+#  type: BasicUniVSRFeatPropWithFlowDCN_Fast_FrmInp3
+#  num_feat: 32
+#  num_extract_block: 0
+#  num_block: 10
+#  deformable_groups: 8
+#  flownet_path: experiments/pretrained_models/flownet/fastflownet_ft_sintel.pth
+#  one_stage_up: true
+
 # path
 path:
   pretrain_network_g: ~
@@ -206,15 +298,14 @@ train:
 
   scheduler:
     type: CosineAnnealingRestartLR
-    periods: [300000]
-    restart_weights: [1]
+    periods: [300000, 300000]
+    restart_weights: [1, 1]
     eta_min: !!float 1e-7
 
-  total_iter: 300000
+  total_iter: 600000
   warmup_iter: -1  # no warm up
   fix_flow: 5000
   flow_lr_mul: 0.125
-  # dcn_lr_mul: 1.0
 
   # losses
   pixel_opt:
@@ -226,22 +317,17 @@ train:
 val:
   val_freq: !!float 5e3
   save_img: false
-  suffix: ~  # add suffix to saved images, if None, use exp name
 
   metrics:
     psnr: # metric name, can be arbitrary
       type: calculate_psnr
       crop_border: 0
-      test_y_channel: false
-    ssim: # metric name, can be arbitrary
-      type: calculate_ssim
-      crop_border: 0
-      test_y_channel: false
+      test_y_channel: true
 
 # logging settings
 logger:
   print_freq: 100
-  save_checkpoint_freq: !!float 5e3
+  save_checkpoint_freq: !!float 1e4
   use_tb_logger: true
   wandb:
     project: ~
